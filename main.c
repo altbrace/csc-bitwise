@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
 
 size_t encode_varint(uint32_t value, uint8_t* buf) {
@@ -47,16 +48,51 @@ uint32_t generate_number() {
 	return r % 268435455;
 }
 
-int main(){
-	FILE* uncompressed = fopen("uncompressed.dat", "ab");
-	if (uncompressed != NULL){
-		for (int i=0; i<1000000; i++){
-			uint32_t number = generate_number();
+int main() {
+	srand(time(NULL));
+	FILE* uncompressed = fopen("uncompressed.dat", "wb");
+	FILE* compressed = fopen("compressed.dat", "wb");
+	uint32_t number = 0;
+	uint8_t varint = 0;
+	size_t byte_count = 0;
+	size_t bytes[100];
+	if (uncompressed != NULL && compressed != NULL) {
+		for (int i = 0; i < 1000000; i++) {
+			number = generate_number();
+			byte_count = encode_varint(number, &varint);
 			fwrite(&number, sizeof(uint32_t), 1, uncompressed);
+			fwrite(&varint, sizeof(uint8_t), byte_count, compressed);
+			if (i<100) bytes[i] = byte_count;
 		}
-	}
-	else{
-		printf("Ошибка открытия файла uncompressed.dat");
+	} else {
+		printf("Ошибка открытия файла(ов)");
 		return EXIT_FAILURE;
 	}
+	fclose(uncompressed);
+	fclose(compressed);
+
+	uncompressed = fopen("uncompressed.dat", "rb");
+	compressed = fopen("compressed.dat", "rb");
+
+	if (uncompressed != NULL && compressed != NULL) {
+		for (int i = 0; i < 100; i++) {
+			fread(&number, sizeof(uint32_t), 1, uncompressed);
+			byte_count = encode_varint(number, &varint);
+			fread(&varint, sizeof(uint8_t), bytes[i], compressed);
+			const uint8_t* bufp = &varint;
+			uint32_t decoded = decode_varint(&bufp);
+			if (decoded != number)
+				printf(
+				    "Ошибка, %u(int) != %u(varint), ITERATION "
+				    "%d\n",
+				    number, decoded, i);
+			else printf("%u == %u\n", number, decoded);
+		}
+	} else {
+		printf("Ошибка открытия файла(ов)");
+		return EXIT_FAILURE;
+	}
+	fclose(uncompressed);
+	fclose(compressed);
+	return 0;
 }
